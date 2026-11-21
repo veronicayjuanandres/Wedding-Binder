@@ -180,6 +180,10 @@ h2{font-size:clamp(28px,4vw,40px);line-height:1.1;margin-bottom:6px}
 .pj .cbar{margin:10px 0 4px}
 .pj .tk:first-of-type{border-top:0}
 .vc .sv:empty{display:none}
+.chip.s-Por-comprar,.chip.s-Extra{background:#3a2d34;color:var(--muted)}
+.chip.s-Comprado{background:rgba(185,201,75,.2);color:var(--chartreuse)}
+.chip.s-Imprescindible{background:rgba(224,122,46,.22);color:#f0a468}
+.hl-link{display:inline-block;margin-top:6px;font-size:13px;color:var(--chartreuse);text-underline-offset:3px}
 .stsel{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer;max-width:150px}
 .stsel option{background:#2a1019;color:#f4ece1}
 .tk .ck.tgl{cursor:pointer}
@@ -255,7 +259,7 @@ var CACHE_KEY = 'binder-cache-v1-' + (SHEET_ID || 'demo');
 var COLORS = ['#e07a2e','#b9c94b','#cdb68a','#a9bee0','#c0577a','#7e8f45','#e39a5c','#8f6fb0','#4f8a64','#d98ba0','#a0714f','#6f9aa0'];
 var MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 var CONTRATADO = ['Contratado','Pagado parcial','Pagado completo'];
-var TABS = [['inicio','Inicio'],['presupuesto','Presupuesto'],['tareas','Tareas'],['proveedores','Proveedores'],['cotizaciones','Cotizaciones'],['bebidas','Bebidas'],['planner','Wedding planner'],['moodboard','Mood board']];
+var TABS = [['inicio','Inicio'],['presupuesto','Presupuesto'],['tareas','Tareas'],['proveedores','Proveedores'],['cotizaciones','Cotizaciones'],['bebidas','Bebidas'],['horaloca','Hora loca'],['planner','Wedding planner'],['moodboard','Mood board']];
 
 /* ---------- utilidades ---------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -306,8 +310,8 @@ function loadSheet(){
   var jobs={fecha:['Resumen','C5:C5'],total:['Resumen','C6:C6'],inv:['Resumen','C7:C7'],pres:['Presupuesto','A7:N206'],tareas:['Tareas','A6:I205'],prov:['Proveedores','A5:G104'],
     cot:['Cotizaciones','A5:J204'],ana:['Wedding planner','B5:C13'],reu:['Wedding planner','B18:F67']};
   var keys=Object.keys(jobs);
-  jobs.beb=['Bebidas','A5:G60'];keys.push('beb');
-  return Promise.all(keys.map(function(k){var q=gviz(jobs[k][0],jobs[k][1]);return k==='beb'?q.catch(function(){return []}):q})).then(function(out){
+  jobs.beb=['Bebidas','A5:G60'];keys.push('beb');jobs.hl=['Hora loca','A5:I60'];keys.push('hl');
+  return Promise.all(keys.map(function(k){var q=gviz(jobs[k][0],jobs[k][1]);return (k==='beb'||k==='hl')?q.catch(function(){return []}):q})).then(function(out){
     var raw={};keys.forEach(function(k,i){raw[k]=out[i]});return raw;
   });
 }
@@ -315,7 +319,7 @@ function loadSheet(){
 /* ---------- convertir filas crudas a datos ---------- */
 function model(raw){
   var m={};
-  [['pres',7],['tareas',6],['prov',5],['cot',5]].forEach(function(a){(raw[a[0]]||[]).forEach(function(r,i){r.__row=a[1]+i})});
+  [['pres',7],['tareas',6],['prov',5],['cot',5],['hl',5]].forEach(function(a){(raw[a[0]]||[]).forEach(function(r,i){r.__row=a[1]+i})});
   var one=function(a){return a&&a[0]?a[0][0]:null};
   m.fecha=dt(one(raw.fecha));m.total=num(one(raw.total));m.invitados=num(one(raw.inv));
   m.pres=(raw.pres||[]).filter(function(r){return str(r[1])!==''}).map(function(r){
@@ -355,6 +359,9 @@ function model(raw){
   });
   m.beb=(raw.beb||[]).filter(function(r){return str(r[1])!==''}).map(function(r){
     return {momento:str(r[0]),bebida:str(r[1]),marca:str(r[2]),bot:num(r[3]),cajas:num(r[4]),obs:str(r[5]),estado:str(r[6])};
+  });
+  m.hl=(raw.hl||[]).filter(function(r){return str(r[1])!==''}).map(function(r){
+    return {row:r.__row,grupo:str(r[0])||'Otros',art:str(r[1]),cant:num(r[2]),precio:num(r[3]),tipo:str(r[4]),estado:str(r[5])||'Por comprar',donde:str(r[6]),link:url(r[7]),nota:str(r[8])};
   });
   m.ana={};(raw.ana||[]).forEach(function(r){if(str(r[0]))m.ana[str(r[0])]=str(r[1])});
   m.reu=(raw.reu||[]).filter(function(r){return str(r[0])||str(r[1])||str(r[2])}).map(function(r){
@@ -473,8 +480,8 @@ function ring(p){
 var EDIT=false,CODE='',RAW=null,OV={};
 try{CODE=localStorage.getItem('binder-code')||''}catch(e){}
 EDIT=!!(API_URL&&CODE);
-var OPTS={Tareas:['Por confirmar','Pendiente','En proceso','Hecho'],Presupuesto:['Por cotizar','Cotizado','Contratado','Pagado parcial','Pagado completo','Descartado'],Proveedores:['Buscando','Cotizando','Contratado','Descartado'],Cotizaciones:['Recibida','Negociando','Aceptada','Rechazada']};
-var MAP={Tareas:{k:'tareas',f:6,c:0},Presupuesto:{k:'pres',f:7,c:3},Proveedores:{k:'prov',f:5,c:5},Cotizaciones:{k:'cot',f:5,c:6}};
+var OPTS={Tareas:['Por confirmar','Pendiente','En proceso','Hecho'],Presupuesto:['Por cotizar','Cotizado','Contratado','Pagado parcial','Pagado completo','Descartado'],Proveedores:['Buscando','Cotizando','Contratado','Descartado'],Cotizaciones:['Recibida','Negociando','Aceptada','Rechazada'],'Hora loca':['Por comprar','Comprado','Descartado']};
+var MAP={Tareas:{k:'tareas',f:6,c:0},Presupuesto:{k:'pres',f:7,c:3},Proveedores:{k:'prov',f:5,c:5},Cotizaciones:{k:'cot',f:5,c:6},'Hora loca':{k:'hl',f:5,c:5}};
 function est(hoja,row,key,cur,extra){
   if(!EDIT||!row)return chip(cur,extra);
   return '<select class="stsel chip s-'+esc(String(cur).replace(/\s+/g,'-'))+'" data-h="'+hoja+'" data-r="'+row+'" data-k="'+esc(key)+'" data-old="'+esc(cur)+'" aria-label="Cambiar estado">'+
@@ -490,6 +497,7 @@ function post(o,code){
 }
 function errMsg(e){
   if(e==='codigo'){EDIT=false;try{localStorage.removeItem('binder-code')}catch(x){}CODE='';editBtn();render();return 'Código incorrecto. Vuelve a activar la edición.'}
+  if(e==='hoja')return 'El código de Google todavía no incluye la pestaña Hora loca. Hay que actualizarlo (ver las instrucciones).';
   if(e==='fila-cambio')return 'La hoja cambió mientras tanto. Pulsa Actualizar y vuelve a intentarlo.';
   return 'No se pudo guardar. Revisa tu conexión e inténtalo otra vez.';
 }
@@ -551,7 +559,7 @@ function nextPays(n){
 }
 function vInicio(){
   var T=M.T,disp=M.total>0?M.total-T.proy:null;
-  var k=kpi('Proyección total',money(T.proy),'lo que esperamos gastar','acc')+
+  var k=kpi('Proyección total',money(T.proy),'lo que esperamos invertir','acc')+
     kpi('Presupuesto',M.total>0?money(M.total):'—',M.total>0?(disp>=0?'quedan '+money(disp)+' disponibles':'nos pasamos por '+money(-disp)):'falta definirlo',M.total>0?(disp>=0?'good':'bad'):'')+
     kpi('Pagado',money(T.pag),M.total>0?pct(T.pag/M.total)+' del presupuesto':'')+
     kpi('Falta pagar',money(T.faltaContr),'de lo ya contratado')+
@@ -588,14 +596,14 @@ function vPresupuesto(){
   }).join('');
   var alerts=M.alertas.length?M.alertas.map(function(r){return '<div class="alert"><i>●</i><div><b>'+esc(r.concepto)+'</b><br><span class="note">'+esc(r.alerta)+'</span></div></div>'}).join(''):'<p class="empty" style="padding:4px 0">Todo en orden, sin alertas.</p>';
   var next30=M.pagos.filter(function(r){var n=dd(r.pfecha);return n>=0&&n<=30}).reduce(function(a,r){return a+r.pmonto},0);
-  return '<section class="view"><h2>Presupuesto</h2><p class="sub">Cuánto vamos a gastar, cuánto llevamos pagado y en qué se va el dinero. Se edita en la hoja de Google.</p>'+
+  return '<section class="view"><h2>Presupuesto</h2><p class="sub">Cuánto vamos a invertir y cuánto llevamos pagado. Se edita en la hoja de Google.</p>'+
     '<div class="kpis" style="margin-top:0">'+kpi('Proyección',money(T.proy),'estimado completo','acc')+kpi('Pagado',money(T.pag),M.total>0?pct(T.pag/M.total)+' del presupuesto':'')+kpi('Falta pagar',money(T.faltaContr),'de lo contratado')+kpi('Próximos 30 días',money(next30),'pagos con fecha')+'</div>'+
     meter()+
-    '<h3 class="h3i">¿En qué se va el dinero?</h3><div class="donuts">'+
+    '<h3 class="h3i">Money allocation</h3><div class="donuts">'+
     '<div class="dcard"><h3>Estimado completo</h3><p class="note">Toda la boda, por categoría</p>'+donut('d1',estItems,money(T.proy),'estimado total')+'</div>'+
     '<div class="dcard"><h3>Lo ya pagado</h3><p class="note">Por categoría</p>'+donut('d2',pagItems,money(T.pag),'pagado')+'</div>'+
-    '<div class="dcard"><h3>Estado del gasto</h3><p class="note">Pagado, por pagar y por contratar</p>'+donut('d3',stItems,T.proy>0?pct(T.pag/T.proy):'0%','ya pagado')+'</div></div>'+
-    '<h3 class="h3i">Cada categoría</h3><p class="note" style="margin:-6px 0 14px">Toca una tarjeta para ver sus gastos. La barra llena es lo pagado.</p><div class="cats">'+cards+'</div>'+
+    '<div class="dcard"><h3>Estado de la inversión</h3><p class="note">Pagado, por pagar y por contratar</p>'+donut('d3',stItems,T.proy>0?pct(T.pag/T.proy):'0%','ya pagado')+'</div></div>'+
+    '<h3 class="h3i">Cada categoría</h3><p class="note" style="margin:-6px 0 14px">Toca una tarjeta para ver su detalle. La barra llena es lo pagado.</p><div class="cats">'+cards+'</div>'+
     '<div class="two" style="margin-top:36px"><div class="box"><h3>Calendario de pagos</h3>'+nextPays(8)+'</div><div class="box"><h3>Alertas'+(M.alertas.length?' <span class="chip warn">'+M.alertas.length+'</span>':'')+'</h3>'+alerts+'</div></div></section>';
 }
 function taskRow(t,noCat){
@@ -655,7 +663,7 @@ function vProveedores(){
   var cards=list.map(function(p){
     return '<div class="vc'+(p.estado==='Descartado'?' off':'')+'"><div class="sv">'+esc(p.serv)+'</div><h3'+(p.nombre?'':' class="tbd"')+'>'+esc(p.nombre||'Por definir')+'</h3><div>'+est('Proveedores',p.row,p.serv,p.estado)+(p.contrato==='Sí'?' <span class="chip s-Hecho">Contrato firmado</span>':'')+'</div>'+
       (p.contacto?'<div class="row"><span>Contacto</span><b>'+esc(p.contacto)+'</b></div>':'')+
-      (p.vig>0?'<div class="row"><span>Costo</span><b>'+money(p.vig)+'</b></div><div class="row"><span>Pagado</span><b>'+money(p.pag)+'</b></div>':'')+
+      (p.vig>0?'<div class="row"><span>Valor</span><b>'+money(p.vig)+'</b></div><div class="row"><span>Pagado</span><b>'+money(p.pag)+'</b></div>':'')+
       (p.ncot>0?'<div class="row"><span>Cotizaciones</span><b>'+p.ncot+'</b></div>':'')+
       '<div class="links">'+contactLinks(p)+'</div>'+(p.nota?'<div class="nt">'+esc(p.nota)+'</div>':'')+'</div>';
   }).join('');
@@ -694,6 +702,35 @@ function vBebidas(){
   return '<section class="view"><h2>Bebidas</h2><p class="sub">Lo que queremos servir y el cálculo estimado de Ana. Las cantidades pueden cambiar según el número de invitados.</p>'+
     '<div class="kpis" style="margin:0 0 6px">'+kpi('Botellas (cálculo de Ana)',bot,'incluye la cerveza')+kpi('Cajas',caj,'')+(M.invitados>0?kpi('Invitados',M.invitados,''):'')+'</div>'+
     (body||'<p class="empty">Aún no hay bebidas en la pestaña «Bebidas» de la hoja.</p>')+'</section>';
+}
+function money2(n){return '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function linkify(t){return esc(t).replace(/(https?:\/\/[^\s<]+)/g,function(u){return '<a href="'+u+'" target="_blank" rel="noopener" style="color:var(--chartreuse)">enlace ↗</a>'})}
+var HF='Todos';
+function vHoraLoca(){
+  var act=M.hl.filter(function(h){return h.estado!=='Descartado'});
+  var comp=act.filter(function(h){return h.estado==='Comprado'}).length;
+  var tot=0,pend=0,must=0;
+  act.forEach(function(h){tot+=h.precio;if(h.estado!=='Comprado'){pend+=h.precio;if(h.tipo==='Imprescindible')must++}});
+  var tipos=['Todos','Imprescindible','Extra'];
+  var fl=tipos.map(function(t){var n=t==='Todos'?M.hl.length:M.hl.filter(function(h){return h.tipo===t}).length;return '<button type="button" data-hf="'+t+'" class="'+(HF===t?'on':'')+'">'+t+'<b>'+n+'</b></button>'}).join('');
+  var list=M.hl.filter(function(h){return HF==='Todos'||h.tipo===HF});
+  var gs=[],gm={};
+  list.forEach(function(h){if(!gm[h.grupo]){gm[h.grupo]=[];gs.push(h.grupo)}gm[h.grupo].push(h)});
+  var body=gs.map(function(g){
+    var l=gm[g],d=l.filter(function(h){return h.estado==='Comprado'}).length;
+    return '<h3 class="h3i">'+esc(g)+' <span class="note" style="font-family:var(--body);font-style:normal">'+d+' de '+l.length+' comprados</span></h3><div class="cards">'+l.map(function(h){
+      return '<div class="vc'+(h.estado==='Descartado'?' off':'')+'"><div class="sv">'+esc(h.tipo)+'</div><h3>'+esc(h.art)+'</h3><div>'+est('Hora loca',h.row,h.art,h.estado)+'</div>'+
+        (h.cant>0?'<div class="row"><span>Cantidad</span><b>'+h.cant+'</b></div>':'')+
+        '<div class="row"><span>Presupuesto</span><b>'+(h.precio>0?money2(h.precio):'por definir')+'</b></div>'+
+        (h.donde?'<div class="row"><span>Dónde</span><b style="text-align:right;font-weight:400;color:var(--muted)">'+esc(h.donde)+'</b></div>':'')+
+        (h.link?'<a class="hl-link" href="'+esc(h.link)+'" target="_blank" rel="noopener">Ver producto ↗</a>':'')+
+        (h.nota?'<div class="nt">'+linkify(h.nota)+'</div>':'')+'</div>';
+    }).join('')+'</div>';
+  }).join('');
+  return '<section class="view"><h2>Hora loca</h2><p class="sub">Todo lo que hay que comprar para la hora loca: lo imprescindible es el look de tu tablero y los extras se pueden saltar. Los precios son de noviembre de 2026 y cambiarán.</p>'+
+    '<div class="kpis" style="margin:0 0 20px">'+kpi('Comprado',comp+' de '+act.length,'artículos')+kpi('Presupuesto estimado',money2(tot),'solo lo que tiene precio','acc')+kpi('Por comprar',money2(pend),'')+kpi('Imprescindibles pendientes',must,'')+'</div>'+
+    '<div class="filters" id="hf">'+fl+'</div>'+
+    (body||'<p class="empty">Aún no hay artículos. Se anotan en la pestaña «Hora loca» de la hoja.</p>')+'</section>';
 }
 function vPlanner(){
   var a=M.ana,keys=['Nombre completo','Empresa','WhatsApp / teléfono','Correo','Instagram / web','Honorarios acordados (USD)','Contrato firmado','Qué incluye su servicio','Notas'];
@@ -734,7 +771,7 @@ function renderTabs(){
 function render(){
   renderTabs();
   if(!M){$('#main').innerHTML='<section class="view"><p class="empty">Cargando…</p></section>';return}
-  var v={inicio:vInicio,presupuesto:vPresupuesto,tareas:vTareas,proveedores:vProveedores,cotizaciones:vCotizaciones,bebidas:vBebidas,planner:vPlanner,moodboard:vMood}[VIEW]||vInicio;
+  var v={inicio:vInicio,presupuesto:vPresupuesto,tareas:vTareas,proveedores:vProveedores,cotizaciones:vCotizaciones,bebidas:vBebidas,horaloca:vHoraLoca,planner:vPlanner,moodboard:vMood}[VIEW]||vInicio;
   $('#main').innerHTML=v();
   wire();
 }
@@ -742,6 +779,7 @@ function wire(){
   wireDonuts();
   $$('#tf button').forEach(function(b){b.onclick=function(){TF.resp=b.getAttribute('data-resp');render()}});
   $$('#tm button').forEach(function(b){b.onclick=function(){TF.mode=b.getAttribute('data-mode');render()}});
+  $$('#hf button').forEach(function(b){b.onclick=function(){HF=b.getAttribute('data-hf');render()}});
   $$('#pf button').forEach(function(b){b.onclick=function(){PF=b.getAttribute('data-pf');render()}});
   var mo=$('#mood-open');if(mo)mo.onclick=function(){MOODON=!MOODON;render()};
 }
